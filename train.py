@@ -68,15 +68,15 @@ def main():
     best_eval_psnr = 0
     best_test_psnr = 0
     current_daytime = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    steps = 1000000
-    save_interval = 1000
-    report_interval = 50
-    test_intervals = [100000, 200000, 400000,
-                      500000, 600000, 700000,
-                      800000, 900000, 1000000]
-    evaluation_interval = [100000, 200000, 400000,
-                            500000, 600000, 700000,
-                            800000, 900000, 1000000]
+    steps = 800000
+    save_interval = 100000
+    report_interval = 500
+    test_intervals = [5, 100000, 200000, 300000,
+                      400000,500000, 600000,
+                      700000, 800000]
+    evaluation_interval = [5, 100000, 200000, 300000,
+                      400000,500000, 600000,
+                      700000, 800000]
 
     val_steps = 100
 
