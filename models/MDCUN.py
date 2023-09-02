@@ -86,8 +86,8 @@ class blockNL(torch.nn.Module):
 
         g = self.g(x_fea) #[b, 3, h, w]
         g_patches = F.unfold(g, self.fs, padding=self.fs // 2)#[b, 3*fs*fs, hw]
-        g_patches = g_patches.view(b, 4, self.fs * self.fs, -1)#[b, 3, fs*fs, hw]
-        g_patches = g_patches.view(b, 4, self.fs * self.fs, h, w)#[b, 3, fs*fs, h, w]
+        g_patches = g_patches.view(b, self.channels, self.fs * self.fs, -1)#[b, 3, fs*fs, hw]
+        g_patches = g_patches.view(b, self.channels, self.fs * self.fs, h, w)#[b, 3, fs*fs, h, w]
         g_patches = g_patches.permute(0, 3, 4, 2, 1)#.contiguous()#[b, h, w, fs*fs, 3]
         # print(g_patches.size())
 
@@ -296,7 +296,7 @@ class ResnetBlock(torch.nn.Module):
 
 
 class MDCUN(nn.Module):
-    def __init__(self, upfactor, mid_channels=64, T = 4, **kwargs):
+    def __init__(self,ms_channels,  mid_channels=64, T = 4, **kwargs):
         super().__init__()
 
         self.mslr_mean = kwargs.get('mslr_mean')
@@ -305,13 +305,13 @@ class MDCUN(nn.Module):
         self.pan_std = kwargs.get('pan_std')
 
         print("now: pan_unfolding_V4")
-        self.up_factor = upfactor
+        self.up_factor = 4
         G0 = mid_channels
         kSize = 3
-
+        self.ms_channels = ms_channels
         self.conv_u = nn.ModuleList([nn.Sequential(*[                         
-            nn.Conv2d(4*(i+1), 64, kSize, padding=(kSize - 1) // 2, stride=1),
-            nn.Conv2d(64, 4, kSize, padding=(kSize - 1) // 2, stride=1)
+            nn.Conv2d(self.ms_channels*(i+1), 64, kSize, padding=(kSize - 1) // 2, stride=1),
+            nn.Conv2d(64, self.ms_channels, kSize, padding=(kSize - 1) // 2, stride=1)
         ]) for i in range(T)])
 
         self.u = nn.ParameterList(
@@ -323,12 +323,12 @@ class MDCUN(nn.Module):
         self.delta = nn.ParameterList(
             [nn.Parameter(torch.tensor(0.1)) for _ in range(T)])
 
-        self.conv_up = Conv_up(4, G0, self.up_factor)
-        self.conv_down = Conv_down(4, G0, self.up_factor)
+        self.conv_up = Conv_up(self.ms_channels, G0, self.up_factor)
+        self.conv_down = Conv_down(self.ms_channels, G0, self.up_factor)
 
         self.rm1 = att_spatial(res_num=3)
 
-        self.NLBlock = blockNL(4, 15)
+        self.NLBlock = blockNL(self.ms_channels, 15)
 
         self.hf_pan = nn.Conv2d(3, 1, 1, padding=0, stride=1)
 
@@ -362,11 +362,25 @@ class MDCUN(nn.Module):
                 uk = self.conv_u[i](x)         # B 4 256 256
 
             # denoising module
-            rm1_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm1_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm1_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm1_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3], 1)  # B 4 256 256
+            if self.ms_channels==4:
+                rm1_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3], 1)  # B 4 256 256
+
+            elif self.ms_channels ==8:
+                rm1_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_4 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,4,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_5 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,5,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_6 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,6,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_7 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,7,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+
+            
+                decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3, rm1_s2_4, rm1_s2_5, rm1_s2_6, rm1_s2_7], 1)  # B 4 256 256
 
             decode_u = decode_u + uk  # B 4 256 256
             uk_list.append(decode_u)
@@ -379,11 +393,25 @@ class MDCUN(nn.Module):
             else:
                 vk = self.conv_u[i](NL)         # B 4 256 256
             # denoising module
-            rm2_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm2_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm2_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            rm2_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-            decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3], 1)  # B 4 256 256
+            if self.ms_channels ==4:
+                rm2_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3], 1)  # B 4 256 256
+            elif self.ms_channels ==8:
+                rm2_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_4 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,4,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_5 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,5,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_6 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,6,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_7 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,7,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3, rm2_s2_4, rm2_s2_5, rm2_s2_6, rm2_s2_7], 1)  # B 4 256 256
+            
+
+
 
             decode_v = decode_v + vk  # B 4 256 256
             vk_list.append(decode_v)
@@ -415,13 +443,13 @@ from torchinfo import summary
 
 if __name__ == "__main__":
 
-    net = MDCUN(T=1)
-    input_ms = torch.rand(1, 4, 64, 64) 
+    net = MDCUN(ms_channels= 8, T=1)
+    input_ms = torch.rand(1, 8, 64, 64) 
     input_pan = torch.rand(1, 1, 256, 256)
     net(input_pan, input_ms)
 
     # Model summary
-    summary(net, [(1, 1, 256, 256), (1, 4, 64, 64)],
+    summary(net, [(1, 1, 256, 256), (1, 8, 64, 64)],
             dtypes=[torch.float32, torch.float32])
     
     total_params = sum(p.numel() for p in net.parameters())
