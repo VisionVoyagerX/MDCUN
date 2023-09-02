@@ -21,17 +21,17 @@ def main():
     print(device)
 
     # Initialize DataLoader
-    train_dataset = GaoFen2(
+    train_dataset = WV3(
         Path("/home/ubuntu/project/Data/WorldView3/train/train_wv3-001.h5"))  # transforms=[(RandomHorizontalFlip(1), 0.3), (RandomVerticalFlip(1), 0.3)]
     train_loader = DataLoader(
         dataset=train_dataset, batch_size=4, shuffle=True, drop_last=True)
 
-    validation_dataset = GaoFen2(
+    validation_dataset = WV3(
         Path("/home/ubuntu/project/Data/WorldView3/val/valid_wv3.h5"))
     validation_loader = DataLoader(
         dataset=validation_dataset, batch_size=1, shuffle=True)
 
-    test_dataset = GaoFen2(
+    test_dataset = WV3(
         Path("/home/ubuntu/project/Data/WorldView3/drive-download-20230627T115841Z-001/test_wv3_multiExm1.h5"))
     test_loader = DataLoader(
         dataset=test_dataset, batch_size=1, shuffle=False)
