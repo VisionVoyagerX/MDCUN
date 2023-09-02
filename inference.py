@@ -27,7 +27,7 @@ def main():
         tr_dir = '/home/ubuntu/project/Data/GaoFen-2/train/train_gf2-001.h5'
         eval_dir = '/home/ubuntu/project/Data/GaoFen-2/val/valid_gf2.h5'
         test_dir =  '/home/ubuntu/project/Data/GaoFen-2/drive-download-20230623T170619Z-001/test_gf2_multiExm1.h5'
-        checkpoint_dir = 'checkpoints/MDCUN_GF2/MDCUN_2023_09_01-13_33_02.pth.tar'
+        checkpoint_dir = 'checkpoints/MDCUN_WV3/MDCUN_2023_09_02-02_07_27.pth.tar'
         ms_channel = 4
     elif choose_dataset == 'WV3':
         dataset = eval('WV3')
