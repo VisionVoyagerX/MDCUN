@@ -40,7 +40,7 @@ def main():
     model = MDCUN(T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
                   pan_std=train_dataset.pan_std.to(device)).to(device)
 
-    optimizer = Adam(model.parameters(), lr=5e-4)
+    optimizer = Adam(model.parameters(), lr=5e-5)
 
     criterion = L1Loss().to(device)
 
@@ -88,7 +88,7 @@ def main():
     lr_decay_intervals = 200000
 
     continue_from_checkpoint = True
-    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_02-01_12_28.pth.tar'
+    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_01-13_33_02.pth.tar'
 
     # load checkpoint
     if continue_from_checkpoint:
