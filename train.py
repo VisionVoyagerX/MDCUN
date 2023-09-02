@@ -40,7 +40,7 @@ def main():
     model = MDCUN(T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
                   pan_std=train_dataset.pan_std.to(device)).to(device)
 
-    optimizer = Adam(model.parameters(), lr=5e-5)
+    optimizer = Adam(model.parameters(), lr=5e-4)
 
     criterion = L1Loss().to(device)
 
@@ -68,13 +68,13 @@ def main():
     best_eval_psnr = 0
     best_test_psnr = 0
     current_daytime = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    steps = 800
-    save_interval = 800
-    report_interval = 500
-    test_intervals = [800, 100000, 200000, 300000,
+    steps = 1000000
+    save_interval = 1000
+    report_interval = 50
+    test_intervals = [100000, 200000, 300000,
                       400000,500000, 600000,
                       700000, 800000]
-    evaluation_interval = [800, 100000, 200000, 300000,
+    evaluation_interval = [100000, 200000, 300000,
                       400000,500000, 600000,
                       700000, 800000]
 
@@ -86,14 +86,6 @@ def main():
 
     scheduler = StepLR(optimizer, step_size=1, gamma=0.5)
     lr_decay_intervals = 200000
-
-    continue_from_checkpoint = True
-    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_01-13_33_02.pth.tar'
-
-    # load checkpoint
-    if continue_from_checkpoint:
-        tr_metrics, val_metrics = load_checkpoint(torch.load(
-            checkpoint_path), model, optimizer, tr_metrics, val_metrics)
 
     print('==> Starting training ...')
     train_iter = iter(train_loader)
