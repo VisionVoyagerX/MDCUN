@@ -296,7 +296,7 @@ class ResnetBlock(torch.nn.Module):
 
 
 class MDCUN(nn.Module):
-    def __init__(self, mid_channels=64, T = 4, **kwargs):
+    def __init__(self, upfactor, mid_channels=64, T = 4, **kwargs):
         super().__init__()
 
         self.mslr_mean = kwargs.get('mslr_mean')
@@ -305,7 +305,7 @@ class MDCUN(nn.Module):
         self.pan_std = kwargs.get('pan_std')
 
         print("now: pan_unfolding_V4")
-        self.up_factor = 4
+        self.up_factor = upfactor
         G0 = mid_channels
         kSize = 3
 
