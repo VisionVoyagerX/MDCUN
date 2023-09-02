@@ -41,7 +41,7 @@ def main():
 
     # Initialize Model, optimizer, criterion and metrics
     # TODO is imge_size necesasary?
-    model = MDCUN(T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
+    model = MDCUN(upfactor=8, T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
                                  pan_std=train_dataset.pan_std.to(device)).to(device)
 
     optimizer = Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))
