@@ -68,8 +68,8 @@ def main():
     best_eval_psnr = 0
     best_test_psnr = 0
     current_daytime = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    steps = 800000
-    save_interval = 100000
+    steps = 800
+    save_interval = 100
     report_interval = 500
     test_intervals = [5, 100000, 200000, 300000,
                       400000,500000, 600000,
@@ -86,6 +86,14 @@ def main():
 
     scheduler = StepLR(optimizer, step_size=1, gamma=0.5)
     lr_decay_intervals = 200000
+
+    continue_from_checkpoint = True
+    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_01-13_33_02.pth.tar'
+
+    # load checkpoint
+    if continue_from_checkpoint:
+        tr_metrics, val_metrics = load_checkpoint(torch.load(
+            checkpoint_path), model, optimizer, tr_metrics, val_metrics)
 
     print('==> Starting training ...')
     train_iter = iter(train_loader)
