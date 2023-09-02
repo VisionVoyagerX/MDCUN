@@ -27,7 +27,7 @@ def main():
         tr_dir = '/home/ubuntu/project/Data/GaoFen-2/train/train_gf2-001.h5'
         eval_dir = '/home/ubuntu/project/Data/GaoFen-2/val/valid_gf2.h5'
         test_dir =  '/home/ubuntu/project/Data/GaoFen-2/drive-download-20230623T170619Z-001/test_gf2_multiExm1.h5'
-        checkpoint_dir = 'checkpoints/MDCUN_WV3/MDCUN_2023_09_02-02_07_27.pth.tar'
+        checkpoint_dir = 'checkpoints/MDCUN_GF2/MDCUN_2023_09_01-13_33_02.pth.tar'
         ms_channel = 4
     elif choose_dataset == 'WV3':
         dataset = eval('WV3')
@@ -61,7 +61,7 @@ def main():
         dataset=test_dataset, batch_size=1, shuffle=False)
 
     # Initialize Model, optimizer, criterion and metrics
-    model = MDCUN(ms_channels= 8, T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
+    model = MDCUN(ms_channels= 4, T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
                      pan_std=train_dataset.pan_std.to(device)).to(device)
 
 
