@@ -86,7 +86,7 @@ def main():
     lr_decay_intervals = 50000
 
     continue_from_checkpoint = True
-    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_01-13_33_02.pth.tar'
+    checkpoint_path = 'checkpoints/MDCUN/MDCUN_2023_09_02-01_12_28.pth.tar'
 
     # load checkpoint
     if continue_from_checkpoint:
