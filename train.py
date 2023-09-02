@@ -22,17 +22,17 @@ def main():
 
     # Initialize DataLoader
     train_dataset = GaoFen2(
-        Path("/home/ubuntu/project/Data/GaoFen-2/train/train_gf2-001.h5"))  # transforms=[(RandomHorizontalFlip(1), 0.3), (RandomVerticalFlip(1), 0.3)]
+        Path("/home/ubuntu/project/Data/WorldView3/train/train_wv3-001.h5"))  # transforms=[(RandomHorizontalFlip(1), 0.3), (RandomVerticalFlip(1), 0.3)]
     train_loader = DataLoader(
         dataset=train_dataset, batch_size=4, shuffle=True, drop_last=True)
 
     validation_dataset = GaoFen2(
-        Path("/home/ubuntu/project/Data/GaoFen-2/val/valid_gf2.h5"))
+        Path("/home/ubuntu/project/Data/WorldView3/val/valid_wv3.h5"))
     validation_loader = DataLoader(
         dataset=validation_dataset, batch_size=1, shuffle=True)
 
     test_dataset = GaoFen2(
-        Path("/home/ubuntu/project/Data/GaoFen-2/drive-download-20230623T170619Z-001/test_gf2_multiExm1.h5"))
+        Path("/home/ubuntu/project/Data/WorldView3/drive-download-20230627T115841Z-001/test_wv3_multiExm1.h5"))
     test_loader = DataLoader(
         dataset=test_dataset, batch_size=1, shuffle=False)
 
@@ -68,15 +68,13 @@ def main():
     best_eval_psnr = 0
     best_test_psnr = 0
     current_daytime = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
-    steps = 1000000
+    steps = 600000
     save_interval = 1000
     report_interval = 50
     test_intervals = [100000, 200000, 300000,
-                      400000,500000, 600000,
-                      700000, 800000]
+                      400000,500000, 600000]
     evaluation_interval = [100000, 200000, 300000,
-                      400000,500000, 600000,
-                      700000, 800000]
+                      400000,500000, 600000]
 
     val_steps = 100
 
@@ -85,7 +83,7 @@ def main():
             dtypes=[torch.float32, torch.float32])
 
     scheduler = StepLR(optimizer, step_size=1, gamma=0.5)
-    lr_decay_intervals = 200000
+    lr_decay_intervals = 150000
 
     print('==> Starting training ...')
     train_iter = iter(train_loader)
