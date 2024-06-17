@@ -1,5 +1,6 @@
+from torchinfo import summary
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -27,19 +28,25 @@ class invPixelShuffle(nn.Module):
         ch = tensor.size(1)
         y = tensor.size(2)
         x = tensor.size(3)
-        assert x % ratio == 0 and y % ratio == 0, 'x, y, ratio : {}, {}, {}'.format(x, y, ratio)
+        assert x % ratio == 0 and y % ratio == 0, 'x, y, ratio : {}, {}, {}'.format(
+            x, y, ratio)
 
         return tensor.view(b, ch, y // ratio, ratio, x // ratio, ratio).permute(0, 1, 3, 5, 2, 4).contiguous().view(b, -1, y // ratio, x // ratio)
+
 
 class ExtractFea(torch.nn.Module):
     def __init__(self, channels):
         super(ExtractFea, self).__init__()
         self.channels = channels
 
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=self.channels, kernel_size=1, padding=0)
-        self.conv2 = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
-        self.conv4 = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(
+            in_channels=4, out_channels=self.channels, kernel_size=1, padding=0)
+        self.conv2 = nn.Conv2d(
+            in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(
+            in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(
+            in_channels=self.channels, out_channels=self.channels, kernel_size=3, padding=1)
 
     def forward(self, frame):
         f0 = F.relu(self.conv1(frame))
@@ -49,6 +56,7 @@ class ExtractFea(torch.nn.Module):
         # out = self.conv2(f0)
         return out
 
+
 class blockNL(torch.nn.Module):
     def __init__(self, channels, fs):
         super(blockNL, self).__init__()
@@ -57,10 +65,14 @@ class blockNL(torch.nn.Module):
         # self.ExtractFea = ExtractFea(channels=self.channels)
         self.softmax = nn.Softmax(dim=-1)
 
-        self.t = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=1, stride=1, bias=False)
-        self.p = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=1, stride=1, bias=False)
-        self.g = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=1, stride=1, bias=False)
-        self.w = nn.Conv2d(in_channels=self.channels, out_channels=self.channels, kernel_size=1, stride=1, bias=False)
+        self.t = nn.Conv2d(in_channels=self.channels,
+                           out_channels=self.channels, kernel_size=1, stride=1, bias=False)
+        self.p = nn.Conv2d(in_channels=self.channels,
+                           out_channels=self.channels, kernel_size=1, stride=1, bias=False)
+        self.g = nn.Conv2d(in_channels=self.channels,
+                           out_channels=self.channels, kernel_size=1, stride=1, bias=False)
+        self.w = nn.Conv2d(in_channels=self.channels,
+                           out_channels=self.channels, kernel_size=1, stride=1, bias=False)
 
     def forward(self, x):
 
@@ -68,35 +80,43 @@ class blockNL(torch.nn.Module):
 
         x_fea = x
 
-        theta = self.t(x_fea).permute(0, 2, 3, 1)#.contiguous()#[b, c, h, w]#[b, h, w,c]
+        # .contiguous()#[b, c, h, w]#[b, h, w,c]
+        theta = self.t(x_fea).permute(0, 2, 3, 1)
         theta = torch.unsqueeze(theta, dim=-2)  # [b, h, w, 1, c]
         # print(theta.size())
 
-        phi = self.p(x_fea)#[b, c, h, w]
+        phi = self.p(x_fea)  # [b, c, h, w]
         b, c, h, w = phi.size()
-        phi_patches = F.unfold(phi, self.fs, padding=self.fs//2)#[b, c*fs*fs, hw]
-        phi_patches = phi_patches.view(b, c, self.fs * self.fs, -1)#[b, c, fs*fs, hw]
-        phi_patches = phi_patches.view(b, c, self.fs * self.fs, h, w)  #[b, c, fs*fs, h, w]
-        phi_patches = phi_patches.permute(0, 3, 4, 1, 2)#.contiguous()#[b, h, w, c, fs*fs]
+        phi_patches = F.unfold(
+            phi, self.fs, padding=self.fs//2)  # [b, c*fs*fs, hw]
+        phi_patches = phi_patches.view(
+            b, c, self.fs * self.fs, -1)  # [b, c, fs*fs, hw]
+        phi_patches = phi_patches.view(
+            b, c, self.fs * self.fs, h, w)  # [b, c, fs*fs, h, w]
+        # .contiguous()#[b, h, w, c, fs*fs]
+        phi_patches = phi_patches.permute(0, 3, 4, 1, 2)
         # print(phi_patches.size())
 
-        att = torch.matmul(theta, phi_patches)# [b, h, w, 1, fs*fs]
-        att = self.softmax(att)# [b, h, w, 1, fs*fs]
+        att = torch.matmul(theta, phi_patches)  # [b, h, w, 1, fs*fs]
+        att = self.softmax(att)  # [b, h, w, 1, fs*fs]
         # print(att.size())
 
-        g = self.g(x_fea) #[b, 3, h, w]
-        g_patches = F.unfold(g, self.fs, padding=self.fs // 2)#[b, 3*fs*fs, hw]
-        g_patches = g_patches.view(b, self.channels, self.fs * self.fs, -1)#[b, 3, fs*fs, hw]
-        g_patches = g_patches.view(b, self.channels, self.fs * self.fs, h, w)#[b, 3, fs*fs, h, w]
-        g_patches = g_patches.permute(0, 3, 4, 2, 1)#.contiguous()#[b, h, w, fs*fs, 3]
+        g = self.g(x_fea)  # [b, 3, h, w]
+        g_patches = F.unfold(g, self.fs, padding=self.fs //
+                             2)  # [b, 3*fs*fs, hw]
+        g_patches = g_patches.view(
+            b, self.channels, self.fs * self.fs, -1)  # [b, 3, fs*fs, hw]
+        g_patches = g_patches.view(
+            b, self.channels, self.fs * self.fs, h, w)  # [b, 3, fs*fs, h, w]
+        # .contiguous()#[b, h, w, fs*fs, 3]
+        g_patches = g_patches.permute(0, 3, 4, 2, 1)
         # print(g_patches.size())
 
         out_x = torch.matmul(att, g_patches)  # [1, h, w, 1, 3]
-        out_x = torch.squeeze(out_x, dim=-2)# [1, h, w, 3]
-        out_x = out_x.permute(0, 3, 1, 2)#.contiguous()
+        out_x = torch.squeeze(out_x, dim=-2)  # [1, h, w, 3]
+        out_x = out_x.permute(0, 3, 1, 2)  # .contiguous()
         # print(alignedframe.size())
         return self.w(out_x) + x
-
 
 
 class Conv_up(nn.Module):
@@ -110,19 +130,19 @@ class Conv_up(nn.Module):
         if up_factor == 2:
             modules_tail = [
                 nn.Upsample(scale_factor=2),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
 
         elif up_factor == 3:
             modules_tail = [
                 nn.Upsample(scale_factor=3),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
 
         elif up_factor == 4:
             modules_tail = [
                 nn.Upsample(scale_factor=4),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
         self.tail = nn.Sequential(*modules_tail)
 
@@ -134,7 +154,7 @@ class Conv_up(nn.Module):
 
 
 class Conv_down(nn.Module):
-    def __init__(self, c_in,mid_c, up_factor):
+    def __init__(self, c_in, mid_c, up_factor):
         super(Conv_down, self).__init__()
 
         body = [nn.Conv2d(in_channels=c_in, out_channels=mid_c, kernel_size=3, padding=3 // 2), nn.ReLU(),
@@ -144,19 +164,19 @@ class Conv_down(nn.Module):
         if up_factor == 4:
             modules_tail = [
                 nn.MaxPool2d(4),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
 
         elif up_factor == 3:
             modules_tail = [
                 nn.MaxPool2d(3),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
 
         elif up_factor == 2:
             modules_tail = [
                 nn.MaxPool2d(2),
-                conv(mid_c, c_in,3),
+                conv(mid_c, c_in, 3),
                 conv(c_in, c_in, 3)]
         self.tail = nn.Sequential(*modules_tail)
 
@@ -172,16 +192,20 @@ class att_spatial(nn.Module):
         super(att_spatial, self).__init__()
 
         block = [
-            ConvBlock(2, 32, 3, 1, 1, activation='prelu', norm=None, bias=False),
+            ConvBlock(2, 32, 3, 1, 1, activation='prelu',
+                      norm=None, bias=False),
         ]
         for i in range(res_num):
-            block.append(ResnetBlock(32, 3, 1, 1, 0.1, activation='prelu', norm=None))
+            block.append(ResnetBlock(32, 3, 1, 1, 0.1,
+                         activation='prelu', norm=None))
         self.block = nn.Sequential(*block)
-        self.spatial = ConvBlock(2, 1, 3, 1, 1, activation='prelu', norm=None, bias=False)
+        self.spatial = ConvBlock(
+            2, 1, 3, 1, 1, activation='prelu', norm=None, bias=False)
 
     def forward(self, x):
         x = self.block(x)
-        x_compress = torch.cat([torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)], dim=1)
+        x_compress = torch.cat([torch.max(x, 1)[0].unsqueeze(
+            1), torch.mean(x, 1).unsqueeze(1)], dim=1)
         x_out = self.spatial(x_compress)
 
         scale = torch.sigmoid(x_out)  # broadcasting
@@ -201,7 +225,7 @@ class ConvBlock(torch.nn.Module):
         self.padding = padding
         self.bias = bias
 
-        if self.norm =='batch':
+        if self.norm == 'batch':
             self.bn = torch.nn.BatchNorm2d(self.output_size)
         elif self.norm == 'instance':
             self.bn = torch.nn.InstanceNorm2d(self.output_size)
@@ -217,12 +241,14 @@ class ConvBlock(torch.nn.Module):
             self.act = torch.nn.Tanh()
         elif self.activation == 'sigmoid':
             self.act = torch.nn.Sigmoid()
-        
-        if self.pad_model == None:   
-            self.conv = torch.nn.Conv2d(self.input_size, self.output_size, self.kernel_size, self.stride, self.padding, bias=self.bias)
+
+        if self.pad_model == None:
+            self.conv = torch.nn.Conv2d(
+                self.input_size, self.output_size, self.kernel_size, self.stride, self.padding, bias=self.bias)
         elif self.pad_model == 'reflection':
             self.padding = nn.Sequential(nn.ReflectionPad2d(self.padding))
-            self.conv = torch.nn.Conv2d(self.input_size, self.output_size, self.kernel_size, self.stride, 0, bias=self.bias)
+            self.conv = torch.nn.Conv2d(
+                self.input_size, self.output_size, self.kernel_size, self.stride, 0, bias=self.bias)
 
     def forward(self, x):
         out = x
@@ -252,8 +278,8 @@ class ResnetBlock(torch.nn.Module):
         self.padding = padding
         self.bias = bias
         self.scale = scale
-        
-        if self.norm =='batch':
+
+        if self.norm == 'batch':
             self.normlayer = torch.nn.BatchNorm2d(input_size)
         elif self.norm == 'instance':
             self.normlayer = torch.nn.InstanceNorm2d(input_size)
@@ -274,16 +300,21 @@ class ResnetBlock(torch.nn.Module):
         else:
             self.act = None
 
-        if self.pad_model == None:   
-            self.conv1 = torch.nn.Conv2d(input_size, input_size, kernel_size, stride, padding, bias=bias)
-            self.conv2 = torch.nn.Conv2d(input_size, input_size, kernel_size, stride, padding, bias=bias)
+        if self.pad_model == None:
+            self.conv1 = torch.nn.Conv2d(
+                input_size, input_size, kernel_size, stride, padding, bias=bias)
+            self.conv2 = torch.nn.Conv2d(
+                input_size, input_size, kernel_size, stride, padding, bias=bias)
             self.pad = None
         elif self.pad_model == 'reflection':
             self.pad = nn.Sequential(nn.ReflectionPad2d(padding))
-            self.conv1 = torch.nn.Conv2d(input_size, input_size, kernel_size, stride, 0, bias=bias)
-            self.conv2 = torch.nn.Conv2d(input_size, input_size, kernel_size, stride, 0, bias=bias)
+            self.conv1 = torch.nn.Conv2d(
+                input_size, input_size, kernel_size, stride, 0, bias=bias)
+            self.conv2 = torch.nn.Conv2d(
+                input_size, input_size, kernel_size, stride, 0, bias=bias)
 
-        layers = filter(lambda x: x is not None, [self.pad, self.conv1, self.normlayer, self.act, self.pad, self.conv2, self.normlayer, self.act])
+        layers = filter(lambda x: x is not None, [
+                        self.pad, self.conv1, self.normlayer, self.act, self.pad, self.conv2, self.normlayer, self.act])
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -296,7 +327,7 @@ class ResnetBlock(torch.nn.Module):
 
 
 class MDCUN(nn.Module):
-    def __init__(self,ms_channels,  mid_channels=64, T = 4, **kwargs):
+    def __init__(self, ms_channels,  mid_channels=64, T=4, **kwargs):
         super().__init__()
 
         self.mslr_mean = kwargs.get('mslr_mean')
@@ -309,9 +340,11 @@ class MDCUN(nn.Module):
         G0 = mid_channels
         kSize = 3
         self.ms_channels = ms_channels
-        self.conv_u = nn.ModuleList([nn.Sequential(*[                         
-            nn.Conv2d(self.ms_channels*(i+1), 64, kSize, padding=(kSize - 1) // 2, stride=1),
-            nn.Conv2d(64, self.ms_channels, kSize, padding=(kSize - 1) // 2, stride=1)
+        self.conv_u = nn.ModuleList([nn.Sequential(*[
+            nn.Conv2d(self.ms_channels*(i+1), 64, kSize,
+                      padding=(kSize - 1) // 2, stride=1),
+            nn.Conv2d(64, self.ms_channels, kSize,
+                      padding=(kSize - 1) // 2, stride=1)
         ]) for i in range(T)])
 
         self.u = nn.ParameterList(
@@ -333,20 +366,23 @@ class MDCUN(nn.Module):
         self.hf_pan = nn.Conv2d(3, 1, 1, padding=0, stride=1)
 
     def forward(self, pan, lms):
-
         pan = (pan - self.pan_mean) / self.pan_std
         lms = (lms - self.mslr_mean) / self.mslr_std
 
-        hp_pan_2 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/2, mode='bicubic'), scale_factor=2, mode='bicubic') # B 1 256 256
+        hp_pan_2 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/2,
+                                       mode='bicubic'), scale_factor=2, mode='bicubic')  # B 1 256 256
 
-        hp_pan_4 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/4, mode='bicubic'), scale_factor=4, mode='bicubic') # B 1 256 256
+        hp_pan_4 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/4,
+                                       mode='bicubic'), scale_factor=4, mode='bicubic')  # B 1 256 256
 
-        hp_pan_8 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/8, mode='bicubic'), scale_factor=8, mode='bicubic') # B 1 256 256
+        hp_pan_8 = pan - F.interpolate(F.interpolate(pan, scale_factor=1/8,
+                                       mode='bicubic'), scale_factor=8, mode='bicubic')  # B 1 256 256
 
-        pan_hp = self.hf_pan(torch.cat([hp_pan_2, hp_pan_4, hp_pan_8], dim=1))  # B 1 256 256
+        pan_hp = self.hf_pan(
+            torch.cat([hp_pan_2, hp_pan_4, hp_pan_8], dim=1))  # B 1 256 256
 
-
-        hms = torch.nn.functional.interpolate(lms, scale_factor=self.up_factor, mode='bilinear', align_corners=False)   # B 4 256 256
+        hms = torch.nn.functional.interpolate(
+            lms, scale_factor=self.up_factor, mode='bilinear', align_corners=False)   # B 4 256 256
         x = hms
 
         uk_list = []
@@ -356,75 +392,124 @@ class MDCUN(nn.Module):
         # decode_u_list = []
 
         for i in range(len(self.conv_u)):
-            if i!=0:
-                uk = self.conv_u[i](torch.cat(uk_list + [x], 1))         # B 4 256 256
+            if i != 0:
+                uk = self.conv_u[i](
+                    torch.cat(uk_list + [x], 1))         # B 4 256 256
             else:
                 uk = self.conv_u[i](x)         # B 4 256 256
 
             # denoising module
-            if self.ms_channels==4:
-                rm1_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3], 1)  # B 4 256 256
+            if self.ms_channels == 4:
+                rm1_s2_0 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 0, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_1 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 1, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_2 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 2, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_3 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 3, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_u = torch.cat(
+                    [rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3], 1)  # B 4 256 256
 
-            elif self.ms_channels ==8:
-                rm1_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_4 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,4,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_5 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,5,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_6 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,6,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm1_s2_7 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(uk[:,7,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
+            elif self.ms_channels == 8:
+                rm1_s2_0 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 0, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_1 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 1, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_2 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 2, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_3 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 3, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_4 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 4, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_5 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 5, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_6 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 6, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm1_s2_7 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(uk[:, 7, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
 
-            
-                decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3, rm1_s2_4, rm1_s2_5, rm1_s2_6, rm1_s2_7], 1)  # B 4 256 256
+                decode_u = torch.cat([rm1_s2_0, rm1_s2_1, rm1_s2_2, rm1_s2_3,
+                                     rm1_s2_4, rm1_s2_5, rm1_s2_6, rm1_s2_7], 1)  # B 4 256 256
 
             decode_u = decode_u + uk  # B 4 256 256
             uk_list.append(decode_u)
 
-
             # NARM
             NL = self.NLBlock(x)        # B 4 256 256
-            if i!=0:
+            if i != 0:
                 vk = self.conv_u[i](torch.cat(vk_list+[NL], 1))
             else:
                 vk = self.conv_u[i](NL)         # B 4 256 256
             # denoising module
-            if self.ms_channels ==4:
-                rm2_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3], 1)  # B 4 256 256
-            elif self.ms_channels ==8:
-                rm2_s2_0 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,0,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_1 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,1,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_2 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,2,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_3 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,3,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_4 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,4,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_5 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,5,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_6 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,6,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                rm2_s2_7 = pan_hp + self.rm1(torch.cat([torch.unsqueeze(vk[:,7,:,:],1), pan], 1)) * pan_hp  # B 1 256 256
-                decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3, rm2_s2_4, rm2_s2_5, rm2_s2_6, rm2_s2_7], 1)  # B 4 256 256
-            
-
-
+            if self.ms_channels == 4:
+                rm2_s2_0 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 0, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_1 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 1, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_2 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 2, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_3 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 3, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_v = torch.cat(
+                    [rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3], 1)  # B 4 256 256
+            elif self.ms_channels == 8:
+                rm2_s2_0 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 0, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_1 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 1, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_2 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 2, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_3 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 3, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_4 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 4, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_5 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 5, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_6 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 6, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                rm2_s2_7 = pan_hp + \
+                    self.rm1(torch.cat(
+                        [torch.unsqueeze(vk[:, 7, :, :], 1), pan], 1)) * pan_hp  # B 1 256 256
+                decode_v = torch.cat([rm2_s2_0, rm2_s2_1, rm2_s2_2, rm2_s2_3,
+                                     rm2_s2_4, rm2_s2_5, rm2_s2_6, rm2_s2_7], 1)  # B 4 256 256
 
             decode_v = decode_v + vk  # B 4 256 256
             vk_list.append(decode_v)
 
             # iteration
-            x = x - self.delta[i]*(self.conv_up(self.conv_down(x)-lms+self.u[i]*(self.conv_down(NL)-lms))+self.eta[i]*(x-decode_u)+self.gama[i]*(NL-decode_v))
+            x = x - self.delta[i]*(self.conv_up(self.conv_down(x)-lms+self.u[i]*(
+                self.conv_down(NL)-lms))+self.eta[i]*(x-decode_u)+self.gama[i]*(NL-decode_v))
 
             outs_list.append(x)
 
             HR = outs_list[-1] * self.mslr_std + self.mslr_mean
 
-        return HR # , uk_list[-1], vk_list[-1] # , decoder_list, fea_list
-    
+        return HR  # , uk_list[-1], vk_list[-1] # , decoder_list, fea_list
+
     '''def test(self, device='cpu'):
         total_params = sum(p.numel() for p in self.parameters())
         print(f'{total_params:,} total parameters.')
@@ -439,18 +524,17 @@ class MDCUN(nn.Module):
         torchsummaryX.summary(self, input_ms.to(device), None, input_pan.to(device))
 '''
 
-from torchinfo import summary
 
 if __name__ == "__main__":
 
-    net = MDCUN(ms_channels= 8, T=1)
-    input_ms = torch.rand(1, 8, 64, 64) 
+    net = MDCUN(ms_channels=8, T=1)
+    input_ms = torch.rand(1, 8, 64, 64)
     input_pan = torch.rand(1, 1, 256, 256)
     net(input_pan, input_ms)
 
     # Model summary
     summary(net, [(1, 1, 256, 256), (1, 8, 64, 64)],
             dtypes=[torch.float32, torch.float32])
-    
+
     total_params = sum(p.numel() for p in net.parameters())
     print(f'{total_params:,} total parameters.')

@@ -8,6 +8,7 @@ from torch.nn import L1Loss
 from torch.utils.data import DataLoader
 from torchvision.transforms import Resize, RandomHorizontalFlip, RandomVerticalFlip, RandomRotation
 from torchmetrics import MetricCollection, PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image import SpectralAngleMapper, ErrorRelativeGlobalDimensionlessSynthesis
 from torchinfo import summary
 
 from data_loader.DataLoader import DIV2K, GaoFen2, Sev2Mod, WV3, GaoFen2panformer
@@ -15,8 +16,59 @@ from models.MDCUN import MDCUN
 from utils import *
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 SERVER = '/home/ubuntu/project'
+
+
+def measure_gpu_throughput(model, input1_, input2_):
+    input1 = input1_.to('cuda')
+    input2 = input2_.to('cuda')
+    model = model.to('cuda')
+
+    ave_forward_throughput = []
+
+    ave_start = time.time()
+    for t in range(300):
+        start = time.time()
+        x = model(input1, input2)
+        end = time.time()
+        fwd_throughput = 1/(end-start)
+        # print('forward_throughput is {:.4f}'.format(fwd_throughput))
+        ave_forward_throughput.append(fwd_throughput)
+
+    ave_fwd_throughput = np.mean(ave_forward_throughput[1:])
+
+    print('Mean throughput over 300 runs: {:.4f}'.format(ave_fwd_throughput))
+
+
+def measure_gpu_latency(model, input1_, input2_):
+    input1 = input1_.to('cuda')
+    input2 = input2_.to('cuda')
+    model = model.to('cuda')
+
+    repetitions = 300
+
+    # GPU-WARM-UP
+    for _ in range(20):  # Increase warm-up iterations to ensure GPU is fully warmed up
+        _ = model(input1, input2)
+        torch.cuda.synchronize()  # Ensure the warm-up operation completes
+
+    # Measure performance
+    timings = []
+    with torch.no_grad():
+        for _ in range(repetitions):
+            start = time.time()
+            _ = model(input1, input2)
+            torch.cuda.synchronize()  # Ensure the operation completes
+            end = time.time()
+            latency = end - start
+            timings.append(latency)
+
+    mean_latency = np.mean(timings)
+    print(
+        f"Mean time over {repetitions} runs: {mean_latency} seconds")
+    return mean_latency
 
 
 def main():
@@ -24,17 +76,17 @@ def main():
 
     if choose_dataset == 'GaoFen2':
         dataset = eval('GaoFen2')
-        tr_dir = '../pansharpenning_dataset/GF2/train/train_gf2.h5'
-        eval_dir = '../pansharpenning_dataset/GF2/val/valid_gf2.h5'
-        test_dir = '../pansharpenning_dataset/GF2/test/test_gf2_multiExm1.h5'
+        tr_dir = 'data/pansharpenning_dataset/GF2/train/train_gf2.h5'
+        eval_dir = 'data/pansharpenning_dataset/GF2/val/valid_gf2.h5'
+        test_dir = 'data/pansharpenning_dataset/GF2/test/test_gf2_multiExm1.h5'
         checkpoint_dir = 'checkpoints/MDCUN_GF2/MDCUN_2023_09_01-13_33_02.pth.tar'
         ms_channel = 4
         ergas_l = 4
     elif choose_dataset == 'WV3':
         dataset = eval('WV3')
-        tr_dir = '../pansharpenning_dataset/WV3/train/train_wv3.h5'
-        eval_dir = '../pansharpenning_dataset/WV3/val/valid_wv3.h5'
-        test_dir = '../pansharpenning_dataset/WV3/test/test_wv3_multiExm1.h5'
+        tr_dir = 'data/pansharpenning_dataset/WV3/train/train_wv3.h5'
+        eval_dir = 'data/pansharpenning_dataset/WV3/val/valid_wv3.h5'
+        test_dir = 'data/pansharpenning_dataset/WV3/test/test_wv3_multiExm1.h5'
         checkpoint_dir = 'checkpoints/MDCUN_WV3/MDCUN_2023_09_02-02_07_27.pth.tar'
         ms_channel = 8
         ergas_l = 4
@@ -42,8 +94,8 @@ def main():
         print(choose_dataset, ' does not exist')
 
     # Prepare device
-    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = "cpu"
     print('Device: ', device)
 
     # Initialize DataLoader
@@ -63,9 +115,8 @@ def main():
         dataset=test_dataset, batch_size=1, shuffle=False)
 
     # Initialize Model, optimizer, criterion and metrics
-    model = MDCUN(ms_channels= ms_channel, T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
-                     pan_std=train_dataset.pan_std.to(device)).to(device)
-
+    model = MDCUN(ms_channels=ms_channel, T=1, mslr_mean=train_dataset.mslr_mean.to(device), mslr_std=train_dataset.mslr_std.to(device), pan_mean=train_dataset.pan_mean.to(device),
+                  pan_std=train_dataset.pan_std.to(device)).to(device)
 
     optimizer = Adam(model.parameters(), lr=5e-4)
 
@@ -73,17 +124,23 @@ def main():
 
     metric_collection = MetricCollection({
         'psnr': PeakSignalNoiseRatio().to(device),
-        'ssim': StructuralSimilarityIndexMeasure().to(device)
+        'ssim': StructuralSimilarityIndexMeasure().to(device),
+        'sam': SpectralAngleMapper().to(device),
+        'ergas': ErrorRelativeGlobalDimensionlessSynthesis().to(device),
     })
 
     val_metric_collection = MetricCollection({
         'psnr': PeakSignalNoiseRatio().to(device),
-        'ssim': StructuralSimilarityIndexMeasure().to(device)
+        'ssim': StructuralSimilarityIndexMeasure().to(device),
+        'sam': SpectralAngleMapper().to(device),
+        'ergas': ErrorRelativeGlobalDimensionlessSynthesis().to(device),
     })
 
     test_metric_collection = MetricCollection({
         'psnr': PeakSignalNoiseRatio().to(device),
-        'ssim': StructuralSimilarityIndexMeasure().to(device)
+        'ssim': StructuralSimilarityIndexMeasure().to(device),
+        'sam': SpectralAngleMapper().to(device),
+        'ergas': ErrorRelativeGlobalDimensionlessSynthesis().to(device),
     })
 
     tr_report_loss = 0
@@ -92,7 +149,7 @@ def main():
     tr_metrics = []
     val_metrics = []
     test_metrics = []
-    
+
     ergas_score = 0
     sam_score = 0
     q2n_score = 0
@@ -119,11 +176,20 @@ def main():
     def scaleMinMax(x):
         return ((x - np.nanmin(x)) / (np.nanmax(x) - np.nanmin(x)))
 
+    input_tensor1 = torch.randn(
+        1, 1, 256, 256)  # Example input tensor 1
+    input_tensor2 = torch.randn(
+        1, ms_channel, 64, 64)  # Example input tensor 2
+    model.eval()
+
+    measure_gpu_throughput(model, input_tensor1, input_tensor2)
+    measure_gpu_latency(model, input_tensor1, input_tensor2)
+
     model.eval()
     with torch.no_grad():
         test_iterator = iter(test_loader)
         for i, (pan, mslr, mshr) in enumerate(test_iterator):
-            
+
             # forward
             pan, mslr, mshr = pan.to(device), mslr.to(
                 device), mshr.to(device)
@@ -132,10 +198,6 @@ def main():
             test_metric = test_metric_collection.forward(mssr, mshr)
             test_report_loss += test_loss
 
-            ergas_score += ergas_batch(mshr, mssr, ergas_l)
-            sam_score += sam_batch(mshr, mssr)
-            q2n_score += q2n_batch(mshr, mssr)
-
             figure, axis = plt.subplots(nrows=1, ncols=4, figsize=(15, 5))
             axis[0].imshow((scaleMinMax(mslr.permute(0, 3, 2, 1).detach().cpu()[
                             0, ...].numpy())).astype(np.float32)[..., :3], cmap='viridis')
@@ -143,7 +205,7 @@ def main():
             axis[0].axis("off")
 
             axis[1].imshow(pan.permute(0, 3, 2, 1).detach().cpu()[
-                            0, ...], cmap='gray')
+                0, ...], cmap='gray')
             axis[1].set_title('(b) PAN')
             axis[1].axis("off")
 
@@ -166,7 +228,7 @@ def main():
             gt = mshr.permute(0, 3, 2, 1).detach().cpu().numpy()
 
             np.savez(f'results/img_array_{choose_dataset}_{i}.npz', mslr=mslr,
-                        pan=pan, mssr=mssr, gt=gt)
+                     pan=pan, mssr=mssr, gt=gt)
 
         # compute metrics
         test_metric = test_metric_collection.compute()
@@ -174,11 +236,11 @@ def main():
 
         # Print final scores
         print(f"Final scores:\n"
-            f"ERGAS: {ergas_score / (i+1)}\n"
-            f"SAM: {sam_score / (i+1)}\n"
-            f"Q2n: {q2n_score / (i+1)}\n"
-            f"PSNR: {test_metric['psnr'].item()}\n"
-            f"SSIM: {test_metric['ssim'].item()}")
+              f"ERGAS: {test_metric['ergas'].item()}\n"
+              f"SAM: {test_metric['sam'].item()}\n"
+              f"PSNR: {test_metric['psnr'].item()}\n"
+              f"SSIM: {test_metric['ssim'].item()}")
+
 
 if __name__ == '__main__':
     main()
